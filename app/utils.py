@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import base64
 import os
+import shutil
 import subprocess
+import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
+import cv2
 import torch
 
 from app.config import EMO_ORDER, PERS_ORDER
@@ -28,6 +31,31 @@ def choose_device(requested: str | None) -> str:
 def ensure_dir(path: str) -> str:
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def create_session_dir(base_dir: str, max_sessions: int = 5) -> str:
+    root = ensure_dir(os.path.join(base_dir, "sessions"))
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    millis = int(time.time() * 1000) % 1000
+    session_dir = os.path.join(root, f"session_{stamp}_{millis:03d}")
+    ensure_dir(session_dir)
+
+    if max_sessions and max_sessions > 0:
+        entries = []
+        for name in os.listdir(root):
+            path = os.path.join(root, name)
+            if os.path.isdir(path) and name.startswith("session_"):
+                try:
+                    entries.append((os.path.getmtime(path), path))
+                except OSError:
+                    continue
+        entries.sort(key=lambda item: item[0], reverse=True)
+        for _, path in entries[max_sessions:]:
+            try:
+                shutil.rmtree(path)
+            except OSError:
+                pass
+    return session_dir
 
 
 def map_scores(labels: List[str], scores: List[float]) -> Dict[str, float]:
@@ -65,8 +93,32 @@ def build_output_payload(result: dict) -> dict:
     }
 
 
-def render_gallery_html(paths, captions, uid: str = "g", thumb_h: int = 150) -> str:
-    def _img_to_data_uri(path: str) -> str:
+def render_gallery_html(
+    paths,
+    captions,
+    uid: str = "g",
+    thumb_h: int = 150,
+    full_h: Optional[int] = None,
+) -> str:
+    def _img_to_data_uri(path: str, target_h: Optional[int]) -> str:
+        ext = "jpeg"
+        try:
+            img = cv2.imread(path)
+            if img is None:
+                raise ValueError("cv2.imread failed")
+            if target_h and target_h > 0:
+                h, w = img.shape[:2]
+                if h > target_h:
+                    scale = float(target_h) / float(h)
+                    new_w = max(1, int(w * scale))
+                    img = cv2.resize(img, (new_w, target_h), interpolation=cv2.INTER_AREA)
+            ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            if ok:
+                b64 = base64.b64encode(buf).decode("ascii")
+                return f"data:image/{ext};base64,{b64}"
+        except Exception:
+            pass
+
         ext = (os.path.splitext(path)[1].lower().lstrip(".") or "jpeg")
         if ext == "jpg":
             ext = "jpeg"
@@ -75,24 +127,27 @@ def render_gallery_html(paths, captions, uid: str = "g", thumb_h: int = 150) -> 
         return f"data:image/{ext};base64,{b64}"
 
     tiles = []
+    full_h = full_h if full_h is not None else max(thumb_h * 3, 360)
     for i, (p, cap) in enumerate(zip(paths, captions)):
         try:
-            src = _img_to_data_uri(p)
+            thumb_src = _img_to_data_uri(p, thumb_h)
+            full_src = _img_to_data_uri(p, full_h)
         except Exception:
-            src = ""
+            thumb_src = ""
+            full_src = ""
         fig_id = f"{uid}_img{i}"
         tiles.append(
             f"""
         <figure style="margin:0 12px 0 0; display:inline-block; text-align:center; vertical-align:top;">
           <a href="#{fig_id}" style="display:inline-block;">
-            <img src="{src}" style="height:{thumb_h}px; width:auto; border-radius:12px; cursor:pointer; background:#000; box-shadow:0 2px 10px rgba(0,0,0,.35);" />
+            <img src="{thumb_src}" style="height:{thumb_h}px; width:auto; border-radius:12px; cursor:pointer; background:#000; box-shadow:0 2px 10px rgba(0,0,0,.35);" />
           </a>
           <figcaption style="font-size:11px; color:#ddd; opacity:0.9; margin-top:6px;">{cap}</figcaption>
         </figure>
 
         <div id="{fig_id}" class="lightbox">
           <a href="#" class="lightbox-close"></a>
-          <img src="{src}" class="lightbox-content" />
+          <img src="{full_src}" class="lightbox-content" />
         </div>
         """
         )

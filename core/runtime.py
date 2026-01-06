@@ -102,12 +102,12 @@ def analyze_video_basic(
     checkpoint_path: str = "best_ep9_emo0.6390_pkl0.8269.pt",
     segment_length: int = 30,
     device: str | None = None,
-    save_dir: str = "outputs"
+    save_dir: str = "outputs",
 ) -> dict:
     init_everything(checkpoint_path=checkpoint_path, device=device)
 
     base = os.path.splitext(os.path.basename(video_path))[0]
-    clip_dir = ensure_dir(os.path.join(save_dir, base))
+    clip_dir = ensure_dir(save_dir)
 
     print(video_path)
     audio_path = convert_video_to_audio(file_path=video_path, file_save=os.path.join(clip_dir, base))
@@ -204,7 +204,6 @@ def analyze_video_basic(
         "personality_scores": per_sig,
         "oscilloscope_path": osc_path,
         "video_duration_sec": duration_sec,
-        "raw": {"video": video_results, "audio": audio_results, "text": text_results}
     }
 
 
@@ -212,12 +211,18 @@ def get_multitask_pred_with_attribution(
     video_path: str,
     checkpoint_path: str = "best_ep9_emo0.6390_pkl0.8269.pt",
     segment_length: int = 30,
-    device: str | None = None
+    device: str | None = None,
+    save_dir: str | None = None,
 ):
     init_everything(checkpoint_path=checkpoint_path, device=device)
 
     # FIX: video_path[:-4] ломается на .webm и вообще на любые расширения != 3 символа
-    file_save = os.path.splitext(video_path)[0]
+    base = os.path.splitext(os.path.basename(video_path))[0]
+    if save_dir:
+        ensure_dir(save_dir)
+        file_save = os.path.join(save_dir, base)
+    else:
+        file_save = os.path.splitext(video_path)[0]
     audio_path = convert_video_to_audio(file_path=video_path, file_save=file_save)
 
     clip_processor = _IMG.processor

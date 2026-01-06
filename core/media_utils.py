@@ -7,7 +7,11 @@ import datetime
 import cv2
 import numpy as np
 import torch
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+from core.visual_metrics import compute_frame_metrics, aggregate_interview_metrics
 
 
 def ensure_dir(path: str) -> str:
@@ -20,8 +24,8 @@ def get_oscilloscope(waveform, sr, path_save):
     ax = fig.add_axes([0, 0, 1, 1])
     ax.axis('off')
     ax.plot(np.linspace(0, len(waveform) / sr, len(waveform)), waveform, linewidth=0.5)
-    plt.savefig(f'{path_save}/oscilloscope.jpg', bbox_inches='tight', pad_inches=0, transparent=True)
-    plt.close()
+    fig.savefig(f'{path_save}/oscilloscope.jpg', bbox_inches='tight', pad_inches=0, transparent=True)
+    plt.close(fig)
 
 
 def convert_video_to_audio(
@@ -245,6 +249,7 @@ def extract_keyframes_from_result(
     indices = infer_keyframe_indices(result, total_frames, n_default=n_default, fps=fps)
 
     scene_paths, face_paths, body_paths = [], [], []
+    frame_stats = []
     for i, idx in enumerate(indices):
         cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
         ok, frame = cap.read()
@@ -278,10 +283,14 @@ def extract_keyframes_from_result(
         cv2.imwrite(p_body, body_crop)
         body_paths.append(p_body)
 
+        frame_stats.append(compute_frame_metrics(frame, face_bbox, body_bbox))
+
     cap.release()
+    metrics = aggregate_interview_metrics(frame_stats)
     return {
         "indices": [int(v) for v in indices],
         "scene": scene_paths,
         "face": face_paths,
         "body": body_paths,
+        "metrics": metrics,
     }

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import time
 from typing import List
 
@@ -13,9 +15,17 @@ from app.config import (
     EMO_ORDER_FOR_BARS,
     PERS_COLORS,
     PERS_ORDER,
+    TARGET_TRAIT_NAMES,
     VIDEO_EXTS,
 )
-from app.utils import build_output_payload, choose_device, convert_webm_to_mp4, ensure_dir, render_gallery_html
+from app.utils import (
+    build_output_payload,
+    choose_device,
+    convert_webm_to_mp4,
+    create_session_dir,
+    ensure_dir,
+    render_gallery_html,
+)
 from core.attribution import (
     compute_contributions_from_result,
     format_contribution_summary,
@@ -23,8 +33,8 @@ from core.attribution import (
     visualize_all_task_heatmaps,
 )
 from core.media_utils import extract_keyframes_from_result
-from core.matching import match_profession
-from core.llm.qwen_client import generate_explanation, unload_model
+from core.matching import get_profession_trait_vector, match_profession
+from core.llm.qwen_client import generate_explanation, generate_explanation_v2, unload_model
 from core.runtime import analyze_video_basic, get_multitask_pred_with_attribution
 
 
@@ -33,9 +43,10 @@ def run_basic_and_split_heatmap(
     checkpoint_path,
     device_choice,
     segment_length,
-    out_dir,
+    output_dir,
     target_features,
     inputs_choice,
+    uid_suffix: str = "",
 ):
     empty_txt = ""
     if isinstance(video_path, dict):
@@ -57,7 +68,7 @@ def run_basic_and_split_heatmap(
 
     ckpt = (checkpoint_path or "").strip() or DEFAULT_CHECKPOINT
     dev = choose_device(device_choice)
-    save_dir = ensure_dir((out_dir or "").strip() or "outputs")
+    save_dir = ensure_dir(output_dir)
 
     if os.path.splitext(video_path)[1].lower() == ".webm":
         video_path = convert_webm_to_mp4(video_path)
@@ -78,8 +89,15 @@ def run_basic_and_split_heatmap(
 
     osc = res_basic.get("oscilloscope_path")
     osc_path = osc if (osc and os.path.exists(osc)) else None
+    if osc_path:
+        osc_unique = os.path.join(save_dir, f"osc{uid_suffix}.jpg")
+        try:
+            shutil.copyfile(osc_path, osc_unique)
+            osc_path = osc_unique
+        except OSError:
+            pass
 
-    bars_png = os.path.join(save_dir, "emo_bars.png")
+    bars_png = os.path.join(save_dir, f"emo_bars{uid_suffix}.png")
     remap = [EMO_ORDER.index(lbl) for lbl in EMO_ORDER_FOR_BARS]
     emo_prob_for_bars = [emo_prob[i] for i in remap]
 
@@ -103,7 +121,7 @@ def run_basic_and_split_heatmap(
         auto_ylim=False,
     )
 
-    pers_bars_png = os.path.join(save_dir, "pers_bars.png")
+    pers_bars_png = os.path.join(save_dir, f"pers_bars{uid_suffix}.png")
     plot_emotion_probs_barchart(
         probs=per_prob,
         labels=PERS_ORDER,
@@ -120,6 +138,7 @@ def run_basic_and_split_heatmap(
         checkpoint_path=ckpt,
         segment_length=int(segment_length),
         device=dev,
+        save_dir=save_dir,
     )
 
     combined_heatmap = visualize_all_task_heatmaps(
@@ -127,8 +146,15 @@ def run_basic_and_split_heatmap(
         name_video=os.path.basename(video_path),
         target_features=int(target_features),
         inputs=inputs_choice,
-        out_dir="heatmaps_img",
+        out_dir=save_dir,
     )
+    if combined_heatmap and os.path.exists(combined_heatmap):
+        heatmap_unique = os.path.join(save_dir, f"heatmap{uid_suffix}.png")
+        try:
+            os.replace(combined_heatmap, heatmap_unique)
+            combined_heatmap = heatmap_unique
+        except OSError:
+            pass
 
     contrib = compute_contributions_from_result(
         result=res_attr,
@@ -146,6 +172,9 @@ def run_basic_and_split_heatmap(
         out_dir=sample_dir,
         n_default=8,
     )
+    metrics = frames_info.get("metrics", {})
+    if isinstance(payload, dict) and metrics:
+        payload.update(metrics)
 
     indices = frames_info.get("indices", [])
     body_paths = frames_info.get("body", [])
@@ -155,9 +184,9 @@ def run_basic_and_split_heatmap(
     captions = [f"Frame {idx}" for idx in indices]
 
     thumb_h = 120
-    body_html = render_gallery_html(body_paths, captions, uid="body", thumb_h=thumb_h)
-    face_html = render_gallery_html(face_paths, captions, uid="face", thumb_h=thumb_h)
-    scene_html = render_gallery_html(scene_paths, captions, uid="scene", thumb_h=thumb_h)
+    body_html = render_gallery_html(body_paths, captions, uid=f"body{uid_suffix}", thumb_h=thumb_h)
+    face_html = render_gallery_html(face_paths, captions, uid=f"face{uid_suffix}", thumb_h=thumb_h)
+    scene_html = render_gallery_html(scene_paths, captions, uid=f"scene{uid_suffix}", thumb_h=thumb_h)
 
     return (
         payload,
@@ -192,7 +221,6 @@ def load_demo_video(path: str):
 
 def run_and_show(
     job_title,
-    job_description,
     video_path,
     checkpoint_path,
     device_choice,
@@ -200,60 +228,67 @@ def run_and_show(
     out_dir,
     target_features,
     inputs_choice,
+    session_dir,
+    history,
 ):
+    base_dir = ensure_dir((out_dir or "").strip() or "outputs")
+    if not session_dir or not os.path.isdir(session_dir):
+        session_dir = create_session_dir(base_dir, max_sessions=5)
+    attempt_id = len(history or []) + 1
+    attempt_dir = os.path.join(session_dir, f"attempt_{attempt_id:02d}")
+    if os.path.isdir(attempt_dir):
+        existing = []
+        for name in os.listdir(session_dir):
+            if name.startswith("attempt_"):
+                try:
+                    existing.append(int(name.split("_", 1)[1]))
+                except Exception:
+                    continue
+        attempt_id = (max(existing) + 1) if existing else 1
+        attempt_dir = os.path.join(session_dir, f"attempt_{attempt_id:02d}")
+    attempt_dir = ensure_dir(attempt_dir)
+    uid_suffix = f"_a{attempt_id:02d}_{int(time.time() * 1000)}"
+
     start = time.time()
     result = run_basic_and_split_heatmap(
         video_path,
         checkpoint_path,
         device_choice,
         segment_length,
-        out_dir,
+        attempt_dir,
         target_features,
         inputs_choice,
+        uid_suffix,
     )
     *core_outputs, video_duration = result
     payload = core_outputs[0]
+    transcript = core_outputs[1]
+    explain_md = core_outputs[5]
+
     if isinstance(payload, dict) and payload.get("error"):
-        transcript = core_outputs[1]
-        osc_path = core_outputs[2]
-        bars_png = core_outputs[3]
-        heatmap = core_outputs[4]
-        explain_md = core_outputs[5]
-        body_html = core_outputs[6]
-        face_html = core_outputs[7]
-        scene_html = core_outputs[8]
-        pers_bars_png = core_outputs[9]
         return (
             payload,
             payload,
-            transcript,
-            osc_path,
-            bars_png,
-            heatmap,
-            explain_md,
-            body_html,
-            face_html,
-            scene_html,
-            pers_bars_png,
+            {},
             gr.update(value=payload["error"], visible=True),
-            gr.update(visible=False),
             "",
             gr.update(visible=False),
+            session_dir,
         )
 
     if isinstance(payload, dict):
+        payload["transcript"] = transcript or ""
+        payload["multimodal_summary"] = _strip_html(explain_md)
         user_scores = payload.get("personality", {})
         match_result = match_profession(
             user_scores=user_scores,
             job_title=job_title or "",
-            job_description=job_description or "",
         )
         payload["profession_match"] = match_result
         core_outputs[0] = payload
 
     elapsed = time.time() - start
     runtime_txt = f"Video duration: {video_duration:.1f} sec | Inference time: {elapsed:.1f} sec"
-    transcript = core_outputs[1]
     osc_path = core_outputs[2]
     bars_png = core_outputs[3]
     heatmap = core_outputs[4]
@@ -262,109 +297,145 @@ def run_and_show(
     face_html = core_outputs[7]
     scene_html = core_outputs[8]
     pers_bars_png = core_outputs[9]
+
+    viz_state = {
+        "transcript": transcript or "",
+        "osc_path": osc_path,
+        "bars_png": bars_png,
+        "heatmap": heatmap,
+        "explain_md": explain_md or "",
+        "body_html": body_html or "",
+        "face_html": face_html or "",
+        "scene_html": scene_html or "",
+        "pers_bars_png": pers_bars_png,
+    }
+
     return (
         payload,
         payload,
-        transcript,
-        osc_path,
-        bars_png,
-        heatmap,
-        explain_md,
-        body_html,
-        face_html,
-        scene_html,
-        pers_bars_png,
+        viz_state,
         gr.update(value="", visible=False),
-        gr.update(visible=True),
         runtime_txt,
         gr.update(visible=True),
+        session_dir,
     )
 
 
-def generate_llm_recommendation(payload: dict, job_title: str, job_description: str):
-    if not isinstance(payload, dict):
+def generate_llm_recommendation(payload: dict, job_title: str, language: str):
+    if not isinstance(payload, dict) or payload.get("error"):
         return payload, payload, []
 
     llm_text = build_llm_explanation(
         payload=payload,
         job_title=job_title or "",
-        job_description=job_description or "",
+        language=language or "English",
     )
     if llm_text:
         payload = dict(payload)
         payload["llm_explanation"] = llm_text
+    elif isinstance(payload, dict):
+        llm_text = "Could not generate recommendation. Please retry."
     unload_model()
     chat = [{"role": "assistant", "content": llm_text}] if llm_text else []
     return payload, payload, chat
 
 
-def build_llm_explanation(payload: dict, job_title: str, job_description: str) -> str:
+def reset_analysis_only():
+    return (
+        gr.update(value=None),
+        {},
+        [],
+        gr.update(visible=False),
+        gr.update(visible=False),
+        {},
+        gr.update(value="", visible=False),
+        "",
+        gr.update(visible=False),
+        {},
+    )
+
+
+def build_llm_explanation(payload: dict, job_title: str, language: str) -> str:
     emotion = payload.get("emotion", {})
     personality = payload.get("personality", {})
     match = payload.get("profession_match", {})
 
-    top_emotion = str(emotion.get("top", ""))
-    top_prob = float(emotion.get("top_prob", 0.0))
-
-    traits_sorted = sorted(personality.items(), key=lambda x: x[1], reverse=True)
-    highs = traits_sorted[:2]
-    lows = traits_sorted[-2:] if len(traits_sorted) >= 2 else traits_sorted
-
-    match_prof = match.get("matched_profession") or {}
-    match_source = match.get("match_source") or "unknown"
-    similarity = float(match_prof.get("similarity", 0.0))
-    top_roles = match.get("top_professions", [])
-    top1_sim = float(top_roles[0].get("similarity", similarity)) if top_roles else similarity
-    gap = max(0.0, top1_sim - similarity)
-
-    verdict = "a weak fit"
-    if top_roles:
-        if similarity == top1_sim:
-            verdict = "likely a good fit"
-        elif gap <= 0.01 and similarity >= 0.85:
-            verdict = "likely a good fit"
-        elif gap <= 0.03:
-            verdict = "a partial fit"
-        else:
-            verdict = "a weak fit"
-    else:
-        if similarity >= 0.7:
-            verdict = "likely a good fit"
-        elif similarity >= 0.6:
-            verdict = "a partial fit"
-
-    negatives = {"Anger", "Sadness", "Fear", "Disgust"}
-    emotion_warning = bool(top_emotion in negatives and top_prob >= 0.5)
-
-    top_roles = top_roles[:3]
-    top_roles_text = ", ".join(
-        f"{r.get('profession', '')} ({r.get('similarity', 0.0):.4f})" for r in top_roles
-    )
-
-    high_text = ", ".join(f"{k} {v:.2f}" for k, v in highs)
-    low_text = ", ".join(f"{k} {v:.2f}" for k, v in lows)
-
-    matched_name = str(match_prof.get("profession", ""))
-    if job_title and match_source != "title":
-        role_note = (
-            f"Requested role '{job_title}' was not found in the dataset. "
-            f"Closest match used: '{matched_name}'."
-        )
-    else:
-        role_note = f"Requested role: {job_title or 'N/A'}."
-
-    summary = (
-        f"{role_note}\n"
-        f"Job description: {job_description}\n"
-        f"Verdict: {verdict} (similarity {similarity:.4f}, gap {gap:.2f}).\n"
-        f"Top emotion: {top_emotion} ({top_prob:.2f}).\n"
-        f"High traits: {high_text}.\n"
-        f"Low traits: {low_text}.\n"
-        f"Top alternative roles: {top_roles_text}.\n"
-        f"Emotion caution: {'yes' if emotion_warning else 'no'}.\n"
-    )
-
     try:
-        return generate_explanation(summary=summary)
+        match_prof = match.get("matched_profession") or {}
+        match_source = match.get("match_source") or ""
+
+        top_roles = match.get("top_professions", []) or []
+        best_match_prof = ""
+        best_match_similarity = 0.0
+        if top_roles:
+            best_match_prof = str(top_roles[0].get("profession", ""))
+            best_match_similarity = float(top_roles[0].get("similarity", 0.0))
+        elif match_prof:
+            best_match_prof = str(match_prof.get("profession", ""))
+            best_match_similarity = float(match_prof.get("similarity", 0.0))
+
+        target_profession = (job_title or "").strip() or best_match_prof
+        target_traits = get_profession_trait_vector(target_profession)
+        if not target_traits and best_match_prof:
+            target_traits = get_profession_trait_vector(best_match_prof)
+        if not target_traits:
+            target_traits = [0.0] * len(TARGET_TRAIT_NAMES)
+        if len(target_traits) < len(TARGET_TRAIT_NAMES):
+            target_traits = list(target_traits) + [0.0] * (len(TARGET_TRAIT_NAMES) - len(target_traits))
+
+        candidate_big5 = [float(personality.get(k, 0.0)) for k in PERS_ORDER]
+        transcription = str(payload.get("transcript", "") or "")
+
+        predicted_emotion = str(emotion.get("top") or "")
+        emotion_confidence = float(emotion.get("top_prob", 0.0)) * 100.0
+
+        if match_source == "title":
+            target_similarity = float(match_prof.get("similarity", 0.0))
+        else:
+            target_similarity = 0.0
+
+        threshold = float(match.get("threshold", 0.7))
+
+        predicted_trait_names = list(PERS_ORDER)
+        predicted_trait_scores = [float(personality.get(k, 0.0)) for k in PERS_ORDER]
+        emotion_dist = emotion.get("distribution", {}) if isinstance(emotion, dict) else {}
+        emotion_names = list(EMO_ORDER)
+        emotion_probs = [float(emotion_dist.get(lbl, 0.0)) for lbl in emotion_names]
+
+        body_position = str(payload.get("body_position", "unknown"))
+        distance_to_camera = str(payload.get("distance_to_camera", "unknown"))
+        framing_note = str(payload.get("framing_note", ""))
+        lighting = str(payload.get("lighting", "unknown"))
+        lighting_note = str(payload.get("lighting_note", ""))
+
+        return generate_explanation_v2(
+            target_profession=target_profession,
+            target_trait_names=list(TARGET_TRAIT_NAMES),
+            target_trait_scores=target_traits,
+            predicted_trait_names=predicted_trait_names,
+            predicted_trait_scores=predicted_trait_scores,
+            emotion_names=emotion_names,
+            emotion_probs=emotion_probs,
+            multimodal_summary=str(payload.get("multimodal_summary", "")),
+            transcription=transcription,
+            body_position=body_position,
+            distance_to_camera=distance_to_camera,
+            framing_note=framing_note,
+            lighting=lighting,
+            lighting_note=lighting_note,
+            best_match_profession=best_match_prof or target_profession,
+            best_match_similarity=best_match_similarity,
+            target_similarity=target_similarity,
+            threshold=threshold,
+            target_language=language or "English",
+        )
     except Exception:
         return ""
+
+
+def _strip_html(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = re.sub(r"<[^>]+>", " ", text)
+    cleaned = re.sub(r"\\s+", " ", cleaned)
+    return cleaned.strip()

@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from typing import Sequence, Optional, Dict, List
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
@@ -142,7 +144,7 @@ def visualize_all_task_heatmaps(
 
         out_path = os.path.join(out_dir, f"{stem}_all_heatmaps.png")
         plt.savefig(out_path, bbox_inches="tight")
-        plt.close()
+        plt.close(fig)
         return out_path
 
     mats = [_build_matrix("emotion", emo_idx)]
@@ -187,7 +189,7 @@ def visualize_all_task_heatmaps(
 
     out_path = os.path.join(out_dir, f"{stem}_all_heatmaps.png")
     plt.savefig(out_path, bbox_inches="tight")
-    plt.close()
+    plt.close(fig)
     return out_path
 
 
@@ -213,8 +215,8 @@ def plot_emotion_probs_barchart(
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     x = np.arange(len(p))
 
-    plt.figure(figsize=figsize, dpi=dpi)
-    ax = plt.gca()
+    fig = plt.figure(figsize=figsize, dpi=dpi)
+    ax = fig.gca()
     ax.bar(x, p * 100.0, color=(colors if colors is not None else None), width=0.6)
     ax.set_ylabel(title, fontsize=14)
     ax.set_xticks(x)
@@ -239,9 +241,9 @@ def plot_emotion_probs_barchart(
         ax.set_ylim(0.0, max(35.0, float(p.max() * 100.0) + 5.0))
     ax.grid(axis="y", alpha=0.25)
     ax.tick_params(axis="both", labelsize=14)
-    plt.tight_layout()
-    plt.savefig(out_path, bbox_inches="tight")
-    plt.close()
+    fig.tight_layout()
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
     return out_path
 
 def compute_contributions_from_result(

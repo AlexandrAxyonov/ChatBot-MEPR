@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional, Sequence
 
 import gradio as gr
 
 from app.config import DEFAULT_NUM_QUESTIONS
-from core.llm.qwen_client import generate_questions, unload_model
+from core.llm.qwen_client import generate_recommendations, unload_model
+from core.matching import get_profession_trait_vector
+
+PROFESSION_SEARCH_LIMIT = 25
 
 
 def format_questions_markdown(questions: List[str]) -> str:
@@ -14,203 +17,188 @@ def format_questions_markdown(questions: List[str]) -> str:
     lines = [f"{i + 1}. {q}" for i, q in enumerate(questions)]
     return "\n".join(lines)
 
-
-def _append_chat(history: List[dict] | None, role: str, content: str) -> List[dict]:
-    history = history or []
-    history.append({"role": role, "content": content})
-    return history
-
-
-def chat_submit(
-    user_message: str,
-    history: List[dict] | None,
-    stage: str,
-    job_title: str,
-    job_description: str,
-    questions: List[str],
+def filter_professions(
+    query: str,
+    options: Sequence[str],
+    current_choice: Optional[str] = None,
 ):
-    message = (user_message or "").strip()
-    if not message:
-        return (
-            history or [],
-            stage,
-            job_title,
-            job_description,
-            questions,
-            gr.update(visible=stage == "questions_ready" and bool(questions)),
-            gr.update(visible=stage == "questions_ready"),
-            "",
-        )
+    q = (query or "").strip().lower()
+    if not q:
+        return gr.update(choices=[], value=None)
 
-    if stage == "ask_title":
-        job_title = message
-        history = _append_chat(history, "user", message)
-        history = _append_chat(
-            history,
-            "assistant",
-            "Thanks. Now send a job description or a short resume summary.",
-        )
-        return (
-            history,
-            "ask_desc",
-            job_title,
-            job_description,
-            questions,
-            gr.update(visible=False),
-            gr.update(visible=False),
-            "",
-        )
+    matches = [p for p in options if q in p.lower()]
+    if matches:
+        prefix = [p for p in matches if p.lower().startswith(q)]
+        rest = [p for p in matches if not p.lower().startswith(q)]
+        matches = prefix + rest
+    if len(matches) > PROFESSION_SEARCH_LIMIT:
+        matches = matches[:PROFESSION_SEARCH_LIMIT]
 
-    if stage == "ask_desc":
-        job_description = message
-        history = _append_chat(history, "user", message)
-        questions = generate_questions(
-            job_title=job_title,
-            job_description=job_description,
-            num_questions=DEFAULT_NUM_QUESTIONS,
-        )
-        if questions:
-            questions_text = format_questions_markdown(questions)
-            history = _append_chat(
-                history,
-                "assistant",
-                "Here are the questions for your video answers:\n"
-                f"{questions_text}\n"
-                "Click Ready to start when you are set.",
-            )
-            return (
-                history,
-                "questions_ready",
-                job_title,
-                job_description,
-                questions,
-                gr.update(visible=True),
-                gr.update(visible=True),
-                "",
-            )
-        history = _append_chat(
-            history,
-            "assistant",
-            "Could not generate questions. You can edit the description and send again, "
-            "or click Regenerate questions.",
-        )
+    value = None
+    if current_choice and current_choice in matches:
+        value = current_choice
+    return gr.update(choices=matches, value=value)
+
+
+def select_profession(choice: str):
+    if not choice:
+        return gr.update()
+    return gr.update(value=choice)
+
+
+def generate_questions_ui(job_title: str, language: str):
+    title = (job_title or "").strip()
+    if not title:
         return (
-            history,
-            "ask_desc",
-            job_title,
-            job_description,
             [],
+            "",
+            "Please select a profession from the list.",
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+        )
+
+    trait_scores = get_profession_trait_vector(title)
+    if not trait_scores:
+        return (
+            [],
+            "",
+            "Please select a profession from the suggestions.",
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+        )
+
+    try:
+        questions = generate_recommendations(
+            job_title=title,
+            trait_scores=trait_scores,
+            target_language=language or "English",
+            num_recommendations=DEFAULT_NUM_QUESTIONS,
+        )
+    finally:
+        unload_model()
+
+    if not questions:
+        return (
+            [],
+            "",
+            "Could not generate questions. Please try again.",
             gr.update(visible=False),
             gr.update(visible=True),
-            "",
+            gr.update(visible=False),
         )
 
-    history = _append_chat(history, "user", message)
-    history = _append_chat(
-        history,
-        "assistant",
-        "Questions are already prepared. Click Ready to start or Regenerate questions.",
-    )
     return (
-        history,
-        stage,
-        job_title,
-        job_description,
         questions,
-        gr.update(visible=bool(questions)),
-        gr.update(visible=True),
+        format_questions_markdown(questions),
         "",
+        gr.update(visible=True),
+        gr.update(visible=True),
+        gr.update(visible=False),
     )
 
 
-def regenerate_questions(
-    history: List[dict] | None,
-    job_title: str,
-    job_description: str,
-):
-    if not (job_title or job_description):
-        history = _append_chat(
-            history,
-            "assistant",
-            "Please provide the job title and description/resume in the chat first.",
+def regenerate_questions_ui(job_title: str, language: str):
+    title = (job_title or "").strip()
+    if not title:
+        return (
+            [],
+            "",
+            "Please select a profession from the list.",
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
         )
-        return history, [], gr.update(visible=False), gr.update(visible=False)
 
-    questions = generate_questions(
-        job_title=job_title,
-        job_description=job_description,
-        num_questions=DEFAULT_NUM_QUESTIONS,
-    )
+    trait_scores = get_profession_trait_vector(title)
+    if not trait_scores:
+        return (
+            [],
+            "",
+            "Please select a profession from the suggestions.",
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+        )
+
+    try:
+        questions = generate_recommendations(
+            job_title=title,
+            trait_scores=trait_scores,
+            target_language=language or "English",
+            num_recommendations=DEFAULT_NUM_QUESTIONS,
+        )
+    finally:
+        unload_model()
+
     if not questions:
-        history = _append_chat(
-            history,
-            "assistant",
+        return (
+            [],
+            "",
             "Could not generate questions. Please try again.",
+            gr.update(visible=False),
+            gr.update(visible=True),
+            gr.update(visible=False),
         )
-        return history, [], gr.update(visible=False), gr.update(visible=True)
 
-    questions_text = format_questions_markdown(questions)
-    history = _append_chat(
-        history,
-        "assistant",
-        "New list of questions:\n"
-        f"{questions_text}",
-    )
     return (
-        history,
         questions,
+        format_questions_markdown(questions),
+        "",
         gr.update(visible=True),
         gr.update(visible=True),
+        gr.update(visible=False),
     )
 
 
 def ready_to_start():
     unload_model()
     return (
-        "analysis",
         gr.update(visible=True),
         gr.update(visible=False),
         gr.update(visible=False),
-        gr.update(interactive=False, value=""),
-        gr.update(interactive=False),
         gr.update(visible=False),
+        gr.update(visible=True),
+        gr.update(visible=False),
+        gr.update(interactive=False),
+        gr.update(interactive=False, visible=False),
+        gr.update(interactive=False),
     )
 
 
 def reset_session():
     unload_model()
-    history = [
-        {
-            "role": "assistant",
-            "content": "Hi! Please tell me which position you are applying for.",
-        }
-    ]
     return (
-        history,
-        "ask_title",
-        "",
-        "",
+        gr.update(value="English", interactive=True),
+        gr.update(value="", interactive=True),
+        gr.update(choices=[], value=None, interactive=True, visible=True),
         [],
+        "",
+        "",
+        gr.update(visible=False),
+        gr.update(visible=True),
         gr.update(visible=False),
         gr.update(visible=False),
         gr.update(visible=False),
-        gr.update(interactive=True, value=""),
-        gr.update(interactive=True),
+        gr.update(visible=False),
+        gr.update(visible=False),
         gr.update(value=None),
         {},
         [],
+        gr.update(visible=False),
+        gr.update(visible=False),
+        {},
+        "",
+        [],
         {},
         gr.update(value="", visible=False),
+        "",
+        gr.update(value="", visible=False),
+        gr.update(interactive=True),
+        "",
         gr.update(visible=False),
         gr.update(visible=False),
-        gr.update(visible=False),
-        "",
-        None,
-        None,
-        None,
-        "",
-        "",
-        "",
-        "",
-        None,
+        gr.update(value=None, visible=False),
+        gr.update(value=None, visible=False),
     )

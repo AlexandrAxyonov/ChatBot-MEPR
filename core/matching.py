@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,6 +11,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 DEFAULT_MATCH_THRESHOLD = 0.7
 DEFAULT_TITLE_MATCH_THRESHOLD = 0.6
 DEFAULT_TOP_K = 3
+DEFAULT_SIMILARITY = "euclidean"
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "profession-profiles.csv"
 
@@ -46,12 +47,57 @@ _EXTRA_KEYS = [
     "Self-transcendence",
 ]
 
+_TRAIT_VECTOR_KEYS = _BASE_KEYS + _EXTRA_KEYS
+
 
 def _load_profiles(path: Path = DATA_PATH) -> pd.DataFrame:
     global _DF_CACHE
     if _DF_CACHE is None:
         _DF_CACHE = pd.read_csv(path)
     return _DF_CACHE
+
+
+def list_professions(path: Path = DATA_PATH) -> List[str]:
+    df = _load_profiles(path)
+    profs = [str(x).strip() for x in df.get("Profession", []) if str(x).strip()]
+    return sorted(set(profs))
+
+
+def get_profession_trait_vector(
+    job_title: str,
+    keys: Optional[Sequence[str]] = None,
+    path: Path = DATA_PATH,
+) -> Optional[List[float]]:
+    title = (job_title or "").strip()
+    if not title:
+        return None
+
+    df = _load_profiles(path)
+    if "Profession" not in df.columns:
+        return None
+
+    mask = df["Profession"].astype(str).str.strip().str.lower() == title.lower()
+    if not mask.any():
+        return None
+
+    row = df[mask].iloc[0]
+    ordered_keys = list(keys or _TRAIT_VECTOR_KEYS)
+
+    col_map: Dict[str, Optional[str]] = {}
+    for key in ordered_keys:
+        col_map[key] = next((c for c in _COLUMN_ALIASES.get(key, []) if c in df.columns), None)
+
+    vec: List[float] = []
+    for key in ordered_keys:
+        col = col_map.get(key)
+        if not col:
+            vec.append(0.0)
+            continue
+        try:
+            vec.append(float(row[col]))
+        except Exception:
+            vec.append(0.0)
+    return vec
 
 
 def _resolve_columns(df: pd.DataFrame, keys: List[str]) -> List[Tuple[str, str]]:
@@ -99,14 +145,12 @@ def _best_title_match(
 def match_profession(
     user_scores: Dict[str, float],
     job_title: str = "",
-    job_description: str = "",
     top_k: int = DEFAULT_TOP_K,
-    similarity: str = "cosine",
+    similarity: str = DEFAULT_SIMILARITY,
     threshold: float = DEFAULT_MATCH_THRESHOLD,
     title_match_threshold: float = DEFAULT_TITLE_MATCH_THRESHOLD,
     use_extended: bool = False,
 ) -> Dict[str, object]:
-    _ = job_description
     df = _load_profiles()
 
     keys = list(_BASE_KEYS)
