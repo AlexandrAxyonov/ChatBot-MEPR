@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
+import io
+from PIL import Image
 
 import gradio as gr
 import matplotlib
@@ -55,8 +57,8 @@ def _plot_radar_grid(
     fig, axes = plt.subplots(
         1,
         count,
-        figsize=(3.6 * count, 3.4),
-        dpi=160,
+        figsize=(3.3 * count, 3.1),
+        dpi=110,
         subplot_kw={"polar": True},
     )
     if count == 1:
@@ -99,8 +101,18 @@ def _plot_radar_grid(
         )
 
     fig.tight_layout()
-    plt.close(fig)
     return fig
+
+
+def _fig_to_png(fig: plt.Figure) -> bytes:
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    img = Image.open(buf)
+    img.load()
+    buf.close()
+    return img
 
 
 def _plot_progress_bars(
@@ -231,12 +243,16 @@ def update_history(
     job_title: str,
     language: str,
     history: Optional[List[Dict[str, object]]],
+    view_mode: int = 0,
     max_items: int = DEFAULT_HISTORY_MAX,
     similarity_method: str = DEFAULT_SIMILARITY,
 ):
     if not isinstance(payload, dict) or payload.get("error"):
         return (
             history or [],
+            gr.update(),
+            gr.update(),
+            gr.update(),
             gr.update(),
             gr.update(),
             gr.update(),
@@ -265,6 +281,9 @@ def update_history(
     if not full_target:
         return (
             history or [],
+            gr.update(),
+            gr.update(),
+            gr.update(),
             gr.update(),
             gr.update(),
             gr.update(),
@@ -315,7 +334,7 @@ def update_history(
     if max_items and len(history_list) > int(max_items):
         history_list = history_list[-int(max_items) :]
 
-    limit_reached = bool(max_items) and attempt_id >= int(max_items)
+    limit_reached = bool(max_items) and len(history_list) >= int(max_items)
 
     limit_msg = (
         f"Maximum attempts reached ({max_items}). Start a new session to continue."
@@ -324,21 +343,25 @@ def update_history(
     )
     limit_update = gr.update(value=limit_msg, visible=bool(limit_msg))
     run_update = gr.update(interactive=not limit_reached)
-    try_again_update = gr.update(visible=(len(history_list) >= 1 and not limit_reached))
+    try_again_update = gr.update(
+        visible=(len(history_list) >= 1 and not limit_reached),
+        interactive=not limit_reached,
+    )
 
     target_label = (job_title or "").strip() or "Target"
 
     target_label = (job_title or "").strip() or "Target"
 
-    radar_fig = None
+    radar_img = None
     if ENABLE_RADAR_PLOTS:
         radar_fig = _plot_radar_grid(history_list, target_vec, target_label)
-    radar_update = gr.update(value=radar_fig, visible=bool(radar_fig))
-
-    bar_update = gr.update(
-        value=_plot_progress_bars(history_list, target_vec, target_label),
-        visible=bool(history_list),
-    )
+        if radar_fig is not None:
+            radar_img = _fig_to_png(radar_fig)
+    show_radar = int(view_mode or 0) == 0
+    radar_update = gr.update(value=radar_img)
+    bar_update = gr.update(value=_plot_progress_bars(history_list, target_vec, target_label))
+    radar_group_update = gr.update(visible=bool(radar_img) and show_radar)
+    bar_group_update = gr.update(visible=bool(history_list) and not show_radar)
 
     if len(history_list) < 2:
         return (
@@ -350,6 +373,9 @@ def update_history(
             limit_update,
             radar_update,
             bar_update,
+            gr.update(visible=True),
+            radar_group_update,
+            bar_group_update,
         )
 
     summary = ""
@@ -380,4 +406,7 @@ def update_history(
         limit_update,
         radar_update,
         bar_update,
+        gr.update(visible=True),
+        radar_group_update,
+        bar_group_update,
     )

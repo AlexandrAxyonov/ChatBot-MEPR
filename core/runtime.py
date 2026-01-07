@@ -19,6 +19,7 @@ from core.modalities.video.video_preprocessor import get_metadata
 from core.media_utils import (
     ensure_dir, get_oscilloscope, convert_video_to_audio
 )
+from core.audio_metrics import compute_audio_metrics
 
 import numpy as np
 import torch.nn.functional as F
@@ -114,6 +115,7 @@ def analyze_video_basic(
     print(audio_path)
     waveform, sr = _load_audio_mono(audio_path, target_sr=16000)
     duration_sec = float(len(waveform) / sr) if sr else 0.0
+    audio_metrics = compute_audio_metrics(waveform, sr)
     get_oscilloscope(waveform, sr, clip_dir)
     osc_path = os.path.join(clip_dir, "oscilloscope.jpg")
 
@@ -204,6 +206,7 @@ def analyze_video_basic(
         "personality_scores": per_sig,
         "oscilloscope_path": osc_path,
         "video_duration_sec": duration_sec,
+        "audio_metrics": audio_metrics,
     }
 
 

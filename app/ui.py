@@ -17,15 +17,15 @@ from app.chat import (
     reset_session,
     select_profession,
 )
-from app.config import DEFAULT_CHECKPOINT
+from app.config import DEFAULT_CHECKPOINT, SHOW_JSON_BLOCK
 from app.progress import update_history
 from core.matching import list_professions
 
 
 def build_demo() -> gr.Blocks:
-    with gr.Blocks(title="MEPR Demo", theme=gr.themes.Default()) as demo:
+    with gr.Blocks(title="CV-MAPS", theme=gr.themes.Default()) as demo:
         with gr.Column(elem_id="page_wrap"):
-            gr.Markdown("# HR Asisstant")
+            gr.Markdown("# CV-MAPS: CV - Multi-Agent Personality-aware System")
 
             demo_video_paths = list_demo_videos()
             profession_choices = list_professions()
@@ -35,9 +35,10 @@ def build_demo() -> gr.Blocks:
             session_state = gr.State("")
             viz_state = gr.State({})
             profession_state = gr.State(profession_choices)
+            progress_view_state = gr.State(0)
 
             with gr.Column(elem_id="question_panel"):
-                gr.Markdown("## Step 1: Select profession and language")
+                gr.Markdown("## Select Language and Desired Profession")
                 lang_dd = gr.Dropdown(
                     choices=["English", "Russian"],
                     value="English",
@@ -54,19 +55,21 @@ def build_demo() -> gr.Blocks:
                 )
                 questions_status = gr.Markdown("")
                 questions_loader = gr.HTML(
-                    "<div class='loader'>Generating questions...</div>",
+                    "<div class='loader'>Generating interview recommendations...</div>",
                     visible=False,
                     elem_id="questions_loader",
                 )
                 questions_md = gr.Markdown("")
                 with gr.Row():
-                    btn_generate = gr.Button("Generate questions", variant="primary")
-                    btn_regen = gr.Button("Regenerate questions", visible=False)
-                    btn_ready = gr.Button("Ready to start", visible=False)
-                    btn_reset = gr.Button("Start new session", variant="primary", visible=False, elem_id="btn_reset")
+                    btn_generate = gr.Button("Generate recommendations", variant="primary")
+                    btn_regen = gr.Button("Regenerate recommendations", visible=False, elem_id="btn_regen")
+                    btn_ready = gr.Button("Ready to start", visible=False, elem_id="btn_ready")
+                    btn_reset = gr.Button("Restart session", variant="primary", visible=False, elem_id="btn_reset")
+
+            gr.Markdown("", elem_classes=["divider"])
 
             with gr.Column(visible=False, elem_id="analysis_panel") as analysis_panel:
-                gr.Markdown("## Step 2: Record your video answers")
+                gr.Markdown("## Upload / Record a Multimodal Self-Presentation")
                 with gr.Row(elem_id="input_panel"):
                     with gr.Column(scale=4, min_width=480, elem_id="video_col"):
                         webcam_constraints = {
@@ -135,13 +138,16 @@ def build_demo() -> gr.Blocks:
                 )
 
                 with gr.Row(elem_id="run_row"):
-                    btn_run = gr.Button("Run", variant="primary", elem_id="run_btn")
+                    btn_run = gr.Button("Evaluate emotions and personality traits", variant="primary", elem_id="run_btn")
                 status_md = gr.Markdown("", elem_id="status_text")
                 runtime_md = gr.Markdown("", elem_id="runtime_text")
-                limit_md = gr.Markdown("", elem_id="limit_md", visible=False)
 
                 with gr.Column(visible=False, elem_id="analysis_outputs") as analysis_outputs:
-                    out_json = gr.JSON(label="Model outputs (JSON)", elem_id="json_block")
+                    out_json = gr.JSON(
+                        label="Model outputs (JSON)",
+                        elem_id="json_block",
+                        visible=SHOW_JSON_BLOCK,
+                    )
 
                     with gr.Accordion("Visualization", open=False, elem_id="viz_panel"):
                         @gr.render(inputs=viz_state)
@@ -226,36 +232,51 @@ def build_demo() -> gr.Blocks:
                                 gr.Markdown("## Summary")
                                 gr.Markdown(value=viz.get("explain_md", ""), label="Explanation")
 
-                    gr.Markdown("## Recommendation", elem_id="recommendation_title")
-                    gr.Markdown("Recommendation will be generated automatically after analysis.")
+                    gr.Markdown("", elem_classes=["divider"])
+                    gr.Markdown("## Explanations for Improving Self-Presentation", elem_id="recommendation_title")
                     llm_loader = gr.HTML(
-                        "<div class='loader'>Generating recommendation...</div>",
+                        "<div class='loader'>Generating recommendations...</div>",
                         visible=False,
                         elem_id="llm_loader",
                     )
-                    out_llm = gr.Chatbot(value=[], height=320, label="AI Recommendation")
-                    btn_explain = gr.Button(
-                        "Regenerate recommendation",
-                        variant="secondary",
-                        visible=False,
-                    )
-                    btn_try_again = gr.Button(
-                        "Try another video",
-                        variant="secondary",
-                        visible=False,
-                        elem_id="btn_try_again",
-                    )
+                    out_llm = gr.Markdown("", elem_id="llm_text")
 
-                with gr.Column(visible=False, elem_id="progress_panel") as progress_panel:
-                    gr.Markdown("## Progress")
-                    progress_md = gr.Markdown("", elem_id="progress_md")
-                    with gr.Row(elem_id="radar_row"):
-                        radar_plot = gr.Plot(label="Trait profile progress", elem_id="radar_plot", visible=False)
-                    progress_bar = gr.Plot(label="Trait comparison", elem_id="progress_bar", visible=False)
-                    gr.Markdown(
-                        "O=Openness, C=Conscientiousness, E=Extraversion, A=Agreeableness, N=Non-Neuroticism.",
-                        elem_id="ocean_note",
-                    )
+                    gr.Markdown("", elem_classes=["divider"])
+                    with gr.Column(visible=False, elem_id="progress_panel") as progress_panel:
+                        gr.Markdown("## Improvement Dynamics and Further Recommendations")
+                        progress_md = gr.Markdown("", elem_id="progress_md")
+                        progress_loader = gr.HTML(
+                            "<div class='loader'></div>",
+                            visible=False,
+                            elem_id="progress_loader",
+                        )
+                        with gr.Column(elem_id="progress_graph"):
+                            with gr.Row(elem_id="progress_view_row") as progress_view_row:
+                                btn_view_prev = gr.Button("<", size="sm", elem_id="btn_view_prev")
+                                gr.HTML("<div class='progress_spacer'></div>", elem_id="progress_spacer")
+                                btn_view_next = gr.Button(">", size="sm", elem_id="btn_view_next")
+                            with gr.Group(visible=False, elem_id="progress_radar") as progress_radar:
+                                radar_plot = gr.Image(label="Trait profile progress", elem_id="radar_plot")
+                            with gr.Group(visible=False, elem_id="progress_bars") as progress_bars:
+                                progress_bar = gr.Plot(label="Trait comparison", elem_id="progress_bar")
+                        gr.Markdown(
+                            "O=Openness, C=Conscientiousness, E=Extraversion, A=Agreeableness, N=Non-Neuroticism.",
+                            elem_id="ocean_note",
+                        )
+                        with gr.Row(elem_id="progress_actions"):
+                            btn_reset_bottom = gr.Button(
+                                "Start new session",
+                                variant="primary",
+                                visible=False,
+                                elem_id="btn_reset_bottom",
+                            )
+                            btn_try_again = gr.Button(
+                                "Try another video",
+                                variant="secondary",
+                                visible=False,
+                                elem_id="btn_try_again",
+                            )
+                        limit_md = gr.Markdown("", elem_id="limit_md", visible=False)
 
         btn_generate.click(
             fn=lambda: gr.update(visible=True),
@@ -271,6 +292,7 @@ def build_demo() -> gr.Blocks:
                 btn_ready,
                 btn_regen,
                 questions_loader,
+                btn_generate,
             ],
             show_progress="hidden",
         )
@@ -311,6 +333,7 @@ def build_demo() -> gr.Blocks:
                 btn_ready,
                 btn_regen,
                 questions_loader,
+                btn_generate,
             ],
             show_progress="hidden",
         )
@@ -352,11 +375,11 @@ def build_demo() -> gr.Blocks:
                 out_json,
                 out_llm,
                 llm_loader,
-                btn_explain,
                 payload_state,
                 session_state,
                 history_state,
                 viz_state,
+                progress_view_state,
                 status_md,
                 runtime_md,
                 limit_md,
@@ -364,8 +387,52 @@ def build_demo() -> gr.Blocks:
                 progress_md,
                 progress_panel,
                 btn_try_again,
+                btn_reset_bottom,
                 radar_plot,
                 progress_bar,
+                progress_radar,
+                progress_bars,
+            ],
+        )
+
+        btn_reset_bottom.click(
+            fn=reset_session,
+            inputs=[],
+            outputs=[
+                lang_dd,
+                job_title_input,
+                job_suggestions,
+                questions_state,
+                questions_md,
+                questions_status,
+                questions_loader,
+                btn_generate,
+                btn_ready,
+                btn_regen,
+                btn_reset,
+                analysis_panel,
+                analysis_outputs,
+                in_video,
+                out_json,
+                out_llm,
+                llm_loader,
+                payload_state,
+                session_state,
+                history_state,
+                viz_state,
+                progress_view_state,
+                status_md,
+                runtime_md,
+                limit_md,
+                btn_run,
+                progress_md,
+                progress_panel,
+                btn_try_again,
+                btn_reset_bottom,
+                radar_plot,
+                progress_bar,
+                progress_radar,
+                progress_bars,
             ],
         )
 
@@ -374,10 +441,12 @@ def build_demo() -> gr.Blocks:
                 gr.update(value="Processing...", visible=True),
                 "",
                 gr.update(visible=False),
-                [],
-                gr.update(visible=False),
+                "",
                 gr.update(visible=False),
                 {},
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
             ),
             inputs=[],
             outputs=[
@@ -385,9 +454,11 @@ def build_demo() -> gr.Blocks:
                 runtime_md,
                 analysis_outputs,
                 out_llm,
-                btn_explain,
                 llm_loader,
                 viz_state,
+                progress_panel,
+                progress_radar,
+                progress_bars,
             ],
         ).then(
             fn=run_and_show,
@@ -413,52 +484,22 @@ def build_demo() -> gr.Blocks:
                 session_state,
             ],
         ).then(
-            fn=lambda: gr.update(visible=True),
+            fn=lambda: (
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(value=""),
+                gr.update(visible=False),
+            ),
             inputs=[],
-            outputs=[llm_loader],
-        ).then(
-            fn=generate_llm_recommendation,
-            inputs=[payload_state, job_title_input, lang_dd],
-            outputs=[out_json, payload_state, out_llm],
-            show_progress="hidden",
-        ).then(
-            fn=lambda: (gr.update(visible=False), gr.update(visible=True)),
-            inputs=[],
-            outputs=[llm_loader, btn_explain],
-        ).then(
-            fn=update_history,
-            inputs=[payload_state, job_title_input, lang_dd, history_state],
             outputs=[
-                history_state,
-                progress_md,
                 progress_panel,
-                btn_try_again,
-                btn_run,
-                limit_md,
-                radar_plot,
-                progress_bar,
+                progress_radar,
+                progress_bars,
+                progress_md,
+                progress_loader,
             ],
-            show_progress="hidden",
-        )
-
-        btn_try_again.click(
-            fn=reset_analysis_only,
-            inputs=[],
-            outputs=[
-                in_video,
-                out_json,
-                out_llm,
-                llm_loader,
-                btn_explain,
-                payload_state,
-                status_md,
-                runtime_md,
-                analysis_outputs,
-                viz_state,
-            ],
-        )
-
-        btn_explain.click(
+        ).then(
             fn=lambda: gr.update(visible=True),
             inputs=[],
             outputs=[llm_loader],
@@ -471,6 +512,98 @@ def build_demo() -> gr.Blocks:
             fn=lambda: gr.update(visible=False),
             inputs=[],
             outputs=[llm_loader],
+        ).then(
+            fn=lambda: (
+                gr.update(visible=True),
+                gr.update(visible=True),
+                gr.update(value="Generating progress report...", visible=True),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False, interactive=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+            ),
+
+            inputs=[],
+            outputs=[
+                progress_panel,
+                progress_loader,
+                progress_md,
+                progress_radar,
+                progress_bars,
+                btn_try_again,
+                progress_view_row,
+                btn_view_prev,
+                btn_view_next,
+            ],
+        ).then(
+            fn=update_history,
+            inputs=[payload_state, job_title_input, lang_dd, history_state, progress_view_state],
+            outputs=[
+                history_state,
+                progress_md,
+                progress_panel,
+                btn_try_again,
+                btn_run,
+                limit_md,
+                radar_plot,
+                progress_bar,
+                btn_reset_bottom,
+                progress_radar,
+                progress_bars,
+            ],
+            show_progress="hidden",
+        ).then(
+            fn=lambda: (
+                gr.update(visible=False),
+                gr.update(visible=True),
+                gr.update(visible=True),
+                gr.update(visible=True),
+            ),
+            inputs=[],
+            outputs=[progress_loader, progress_view_row, btn_view_prev, btn_view_next],
+        )
+
+        def _toggle_progress_view(current_choice: int):
+            view_choice = 1 - int(current_choice or 0)
+            show_radar = view_choice == 0
+            return (
+                view_choice,
+                gr.update(visible=show_radar),
+                gr.update(visible=not show_radar),
+            )
+
+        btn_view_prev.click(
+            fn=_toggle_progress_view,
+            inputs=[progress_view_state],
+            outputs=[progress_view_state, progress_radar, progress_bars],
+        )
+        btn_view_next.click(
+            fn=_toggle_progress_view,
+            inputs=[progress_view_state],
+            outputs=[progress_view_state, progress_radar, progress_bars],
+        )
+
+        btn_try_again.click(
+            fn=reset_analysis_only,
+            inputs=[],
+            outputs=[
+                in_video,
+                out_json,
+                out_llm,
+                llm_loader,
+                progress_loader,
+                payload_state,
+                status_md,
+                runtime_md,
+                analysis_outputs,
+                viz_state,
+                progress_panel,
+                progress_radar,
+                progress_bars,
+                progress_view_row,
+            ],
         )
 
     return demo

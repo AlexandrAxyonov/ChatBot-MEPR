@@ -267,12 +267,15 @@ def generate_explanation_v2(
     framing_note: str,
     lighting: str,                     # e.g., "low", "normal", "overexposed"
     lighting_note: str,
+    audio_loudness: str,               # e.g., "quiet", "normal", "loud"
+    audio_noise: str,                  # e.g., "clean", "moderate", "noisy"
+    audio_note: str,
     best_match_profession: str,
     best_match_similarity: float,
     target_similarity: float,
-    threshold: float = 0.7,
+    threshold: float = 0.8,
     target_language: str = "English",
-    words_limit: int = 300,
+    words_limit: int = 400,
     model_id: str = DEFAULT_MODEL_ID,
 ) -> str:
     tokenizer, model = _load_model(model_id=model_id)
@@ -302,6 +305,9 @@ def generate_explanation_v2(
         f"Distance to camera: {distance_to_camera}\n"
         f"Lighting: {lighting}\n"
         f"Lighting note: {lighting_note}\n"
+        f"Audio loudness: {audio_loudness}\n"
+        f"Audio noise level: {audio_noise}\n"
+        f"Audio note: {audio_note}\n"
         f"Similarity to target profession: {target_similarity:.3f}\n"
         f"Similarity to best-matching profession ('{best_match_profession}'): {best_match_similarity:.3f}\n"
         f"Good-fit threshold: {threshold}\n"
@@ -313,11 +319,12 @@ def generate_explanation_v2(
         "3. Briefly describe 2 strongest and 2 weakest Big Five traits relative to the target profile (use trait names as-is).\n"
         "4. Emotion check: if dominant emotion is not 'Neutral' AND dominant_prob > 0.4 AND neutral_prob < 0.4, warn it may distort the assessment and suggest re-recording in a calm state.\n"
         "5. Visual feedback: comment on framing and lighting. Use the framing_note. If distance_to_camera != 'normal', advise adjusting distance. If lighting != 'normal', use the lighting_note.\n"
-        "6. Give 2-3 natural topics to discuss in the next video that could better reveal required traits.\n"
-        f"7. Keep total length under {words_limit} words.\n"
-        f"8. Write in {target_language}. NEVER translate profession names, trait names, or emotion names.\n"
-        "9. Use 2-3 short paragraphs separated by blank lines.\n"
-        "10. Return only the response text. No headings, bullet points, or markdown."
+        "6. Audio feedback: mention if audio is quiet or noisy using the audio_note.\n"
+        "7. Give 2-3 natural topics to discuss in the next video that could better reveal required traits.\n"
+        f"8. Keep total length under {words_limit} words.\n"
+        f"9. Write in {target_language}. NEVER translate profession names, trait names, or emotion names.\n"
+        "10. Use 2-3 short paragraphs separated by blank lines.\n"
+        "11. Return only the response text. No headings, bullet points, or markdown."
     )
 
     messages = [{"role": "user", "content": prompt}]

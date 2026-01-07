@@ -1,7 +1,8 @@
 DEFAULT_CHECKPOINT = "best_ep9_emo0.6390_pkl0.8269.pt"
 DEFAULT_NUM_QUESTIONS = 5
 DEFAULT_HISTORY_MAX = 3
-ENABLE_RADAR_PLOTS = False
+ENABLE_RADAR_PLOTS = True
+SHOW_JSON_BLOCK = False
 
 EMO_ORDER = ["Neutral", "Anger", "Disgust", "Fear", "Happiness", "Sadness", "Surprise"]
 EMO_ORDER_FOR_BARS = ["Neutral", "Anger", "Disgust", "Fear", "Happiness", "Sadness", "Surprise"]
@@ -46,3 +47,11 @@ VISUAL_LIGHT_BACKLIT_DELTA = 25.0
 
 VISUAL_CENTER_RATIO_GOOD = 0.60
 VISUAL_POSITION_STABILITY_BAD = 0.08
+
+# Audio quality thresholds (dBFS)
+AUDIO_LOUDNESS_LOW = -35.0
+AUDIO_LOUDNESS_HIGH = -20.0
+AUDIO_NOISE_LOW = -50.0
+AUDIO_NOISE_HIGH = -40.0
+AUDIO_FRAME_SEC = 0.05
+AUDIO_HOP_SEC = 0.025

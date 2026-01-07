@@ -83,6 +83,9 @@ def run_basic_and_split_heatmap(
     video_duration = float(res_basic.get("video_duration_sec", 0.0))
 
     payload = build_output_payload(res_basic)
+    audio_metrics = res_basic.get("audio_metrics", {})
+    if isinstance(payload, dict) and isinstance(audio_metrics, dict) and audio_metrics:
+        payload.update(audio_metrics)
     transcript = res_basic.get("transcript", "")
     emo_prob = list(map(float, res_basic.get("emotion_logits", [0.0] * len(EMO_ORDER))))
     per_prob = list(map(float, res_basic.get("personality_scores", [0.0] * len(PERS_ORDER))))
@@ -323,7 +326,7 @@ def run_and_show(
 
 def generate_llm_recommendation(payload: dict, job_title: str, language: str):
     if not isinstance(payload, dict) or payload.get("error"):
-        return payload, payload, []
+        return payload, payload, ""
 
     llm_text = build_llm_explanation(
         payload=payload,
@@ -336,15 +339,14 @@ def generate_llm_recommendation(payload: dict, job_title: str, language: str):
     elif isinstance(payload, dict):
         llm_text = "Could not generate recommendation. Please retry."
     unload_model()
-    chat = [{"role": "assistant", "content": llm_text}] if llm_text else []
-    return payload, payload, chat
+    return payload, payload, llm_text or ""
 
 
 def reset_analysis_only():
     return (
         gr.update(value=None),
         {},
-        [],
+        "",
         gr.update(visible=False),
         gr.update(visible=False),
         {},
@@ -352,6 +354,10 @@ def reset_analysis_only():
         "",
         gr.update(visible=False),
         {},
+        gr.update(visible=False),
+        gr.update(visible=False),
+        gr.update(visible=False),
+        gr.update(visible=False),
     )
 
 
@@ -394,7 +400,7 @@ def build_llm_explanation(payload: dict, job_title: str, language: str) -> str:
         else:
             target_similarity = 0.0
 
-        threshold = float(match.get("threshold", 0.7))
+        threshold = float(match.get("threshold", 0.8))
 
         predicted_trait_names = list(PERS_ORDER)
         predicted_trait_scores = [float(personality.get(k, 0.0)) for k in PERS_ORDER]
@@ -407,6 +413,9 @@ def build_llm_explanation(payload: dict, job_title: str, language: str) -> str:
         framing_note = str(payload.get("framing_note", ""))
         lighting = str(payload.get("lighting", "unknown"))
         lighting_note = str(payload.get("lighting_note", ""))
+        audio_loudness = str(payload.get("audio_loudness", "unknown"))
+        audio_noise = str(payload.get("audio_noise", "unknown"))
+        audio_note = str(payload.get("audio_note", ""))
 
         return generate_explanation_v2(
             target_profession=target_profession,
@@ -423,6 +432,9 @@ def build_llm_explanation(payload: dict, job_title: str, language: str) -> str:
             framing_note=framing_note,
             lighting=lighting,
             lighting_note=lighting_note,
+            audio_loudness=audio_loudness,
+            audio_noise=audio_noise,
+            audio_note=audio_note,
             best_match_profession=best_match_prof or target_profession,
             best_match_similarity=best_match_similarity,
             target_similarity=target_similarity,

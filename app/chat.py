@@ -56,6 +56,7 @@ def generate_questions_ui(job_title: str, language: str):
             gr.update(visible=False),
             gr.update(visible=False),
             gr.update(visible=False),
+            gr.update(visible=True),
         )
 
     trait_scores = get_profession_trait_vector(title)
@@ -67,6 +68,7 @@ def generate_questions_ui(job_title: str, language: str):
             gr.update(visible=False),
             gr.update(visible=False),
             gr.update(visible=False),
+            gr.update(visible=True),
         )
 
     try:
@@ -87,6 +89,7 @@ def generate_questions_ui(job_title: str, language: str):
             gr.update(visible=False),
             gr.update(visible=True),
             gr.update(visible=False),
+            gr.update(visible=False),
         )
 
     return (
@@ -95,6 +98,7 @@ def generate_questions_ui(job_title: str, language: str):
         "",
         gr.update(visible=True),
         gr.update(visible=True),
+        gr.update(visible=False),
         gr.update(visible=False),
     )
 
@@ -109,6 +113,7 @@ def regenerate_questions_ui(job_title: str, language: str):
             gr.update(visible=False),
             gr.update(visible=False),
             gr.update(visible=False),
+            gr.update(visible=True),
         )
 
     trait_scores = get_profession_trait_vector(title)
@@ -120,6 +125,7 @@ def regenerate_questions_ui(job_title: str, language: str):
             gr.update(visible=False),
             gr.update(visible=False),
             gr.update(visible=False),
+            gr.update(visible=True),
         )
 
     try:
@@ -140,6 +146,7 @@ def regenerate_questions_ui(job_title: str, language: str):
             gr.update(visible=False),
             gr.update(visible=True),
             gr.update(visible=False),
+            gr.update(visible=False),
         )
 
     return (
@@ -148,6 +155,7 @@ def regenerate_questions_ui(job_title: str, language: str):
         "",
         gr.update(visible=True),
         gr.update(visible=True),
+        gr.update(visible=False),
         gr.update(visible=False),
     )
 
@@ -185,13 +193,13 @@ def reset_session():
         gr.update(visible=False),
         gr.update(value=None),
         {},
-        [],
-        gr.update(visible=False),
+        "",
         gr.update(visible=False),
         {},
         "",
         [],
         {},
+        gr.update(value=0),
         gr.update(value="", visible=False),
         "",
         gr.update(value="", visible=False),
@@ -199,6 +207,9 @@ def reset_session():
         "",
         gr.update(visible=False),
         gr.update(visible=False),
+        gr.update(visible=False),
         gr.update(value=None, visible=False),
         gr.update(value=None, visible=False),
+        gr.update(visible=False),
+        gr.update(visible=False),
     )

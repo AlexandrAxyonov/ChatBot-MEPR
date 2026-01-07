@@ -102,14 +102,78 @@
   border: none !important;
 }
 
-#btn_reset button {
+#btn_reset,
+#btn_reset button,
+#btn_reset .gr-button {
   background: var(--accent) !important;
   color: #ffffff !important;
   border: 1px solid var(--accent) !important;
   font-weight: 600;
   padding: 6px 14px;
 }
-#btn_reset button:hover {
+#btn_reset:hover,
+#btn_reset button:hover,
+#btn_reset .gr-button:hover {
+  background: var(--accent-strong) !important;
+  border-color: var(--accent-strong) !important;
+}
+
+#btn_reset_bottom,
+#btn_reset_bottom button,
+#btn_reset_bottom .gr-button {
+  background: #e0f2fe !important;
+  color: #075985 !important;
+  border: 1px solid #7dd3fc !important;
+  font-weight: 600;
+  padding: 6px 14px;
+}
+#btn_reset_bottom:hover,
+#btn_reset_bottom button:hover,
+#btn_reset_bottom .gr-button:hover {
+  background: #bae6fd !important;
+  border-color: #38bdf8 !important;
+}
+
+#btn_ready,
+#btn_ready button,
+#btn_ready .gr-button {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--accent) !important;
+}
+#btn_ready:hover,
+#btn_ready button:hover,
+#btn_ready .gr-button:hover {
+  background: var(--accent-strong) !important;
+  border-color: var(--accent-strong) !important;
+}
+
+#btn_regen,
+#btn_regen button,
+#btn_regen .gr-button {
+  background: #e0f2fe !important;
+  color: #075985 !important;
+  border: 1px solid #7dd3fc !important;
+}
+#btn_regen:hover,
+#btn_regen button:hover,
+#btn_regen .gr-button:hover {
+  background: #bae6fd !important;
+  border-color: #38bdf8 !important;
+}
+
+#btn_try_again,
+#btn_try_again button,
+#btn_try_again .gr-button {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--accent) !important;
+  font-weight: 600;
+  padding: 6px 14px;
+}
+#btn_try_again:hover,
+#btn_try_again button:hover,
+#btn_try_again .gr-button:hover {
   background: var(--accent-strong) !important;
   border-color: var(--accent-strong) !important;
 }
@@ -325,26 +389,121 @@
 #progress_panel {
   margin-top: 16px;
 }
+#progress_panel.hidden {
+  display: none !important;
+}
 #progress_md {
   color: var(--text-muted);
   font-size: 14px;
+}
+#progress_view_row {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  padding: 0 0;
+  pointer-events: auto;
+}
+#progress_spacer {
+  display: none;
+}
+#btn_view_prev,
+#btn_view_next {
+  position: absolute;
+  flex: 0 0 auto;
+  min-width: 40px !important;
+  width: 40px !important;
+  max-width: 40px !important;
+}
+
+#btn_view_prev {
+  left: -20px;
+}
+#btn_view_next {
+  right: -20px;
+}
+
+#btn_view_prev > .form,
+#btn_view_next > .form {
+  min-width: 40px !important;
+  width: 40px !important;
+  max-width: 40px !important;
+}
+#btn_view_prev button,
+#btn_view_next button {
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
+  font-weight: 700;
+  pointer-events: auto;
+}
+#btn_view_prev,
+#btn_view_next {
+  max-width: 40px !important;
+}
+#btn_view_prev button:hover,
+#btn_view_next button:hover {
+  background: #e2e8f0 !important;
+  border-color: #cbd5f5 !important;
 }
 #ocean_note {
   color: var(--text-muted);
   font-size: 13px;
   margin-top: 6px;
 }
-#radar_row {
-  gap: 16px;
-  align-items: flex-start;
-}
-#radar_row .gr-plot {
+#progress_graph {
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
+  min-height: 0;
+  position: relative;
+}
+#progress_radar,
+#progress_bars {
+  width: 100%;
+  min-height: 320px;
+}
+#radar_plot,
+#progress_bar {
+  height: 320px;
+}
+#radar_plot img {
+  height: 100% !important;
+  width: 100% !important;
+  object-fit: contain !important;
+}
+#progress_bar .plot-container,
+#progress_bar .js-plotly-plot,
+#progress_bar .main-svg {
+  height: 320px !important;
+}
+
+/* Hide image toolbars on static charts */
+#osc_img .toolbar,
+#emo_bar .toolbar,
+#pers_bar .toolbar,
+#osc_img [data-testid="image-toolbar"],
+#emo_bar [data-testid="image-toolbar"],
+#pers_bar [data-testid="image-toolbar"] {
+  display: none !important;
 }
 #progress_bar {
   margin-top: 6px;
+}
+#progress_bar img.svelte-n8pych{
+  width: 70%;
 }
 
 #viz_panel > button {
