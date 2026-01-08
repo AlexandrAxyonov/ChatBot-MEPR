@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 
-DEFAULT_MATCH_THRESHOLD = 0.7
+DEFAULT_MATCH_THRESHOLD = 0.8
 DEFAULT_TITLE_MATCH_THRESHOLD = 0.6
 DEFAULT_TOP_K = 3
 DEFAULT_SIMILARITY = "euclidean"

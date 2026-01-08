@@ -14,6 +14,32 @@ import torch
 from app.config import EMO_ORDER, PERS_ORDER
 
 
+_ATTEMPT_TIMER = {"start_ts": None, "attempt": None}
+
+
+def start_attempt_timer(attempt_id: int | None) -> None:
+    _ATTEMPT_TIMER["start_ts"] = time.time()
+    _ATTEMPT_TIMER["attempt"] = attempt_id
+    label = f"attempt {attempt_id}" if attempt_id else "attempt"
+    print(f"[timer] {label} total start")
+
+
+def finish_attempt_timer() -> None:
+    start_ts = _ATTEMPT_TIMER.get("start_ts")
+    attempt_id = _ATTEMPT_TIMER.get("attempt")
+    if start_ts:
+        elapsed = time.time() - float(start_ts)
+        label = f"attempt {attempt_id}" if attempt_id else "attempt"
+        print(f"[timer] {label} total end total={elapsed:.2f}s")
+    _ATTEMPT_TIMER["start_ts"] = None
+    _ATTEMPT_TIMER["attempt"] = None
+
+
+def reset_attempt_timer() -> None:
+    _ATTEMPT_TIMER["start_ts"] = None
+    _ATTEMPT_TIMER["attempt"] = None
+
+
 def load_css() -> str:
     css_path = Path(__file__).resolve().parents[1] / "assets" / "app.css"
     try:

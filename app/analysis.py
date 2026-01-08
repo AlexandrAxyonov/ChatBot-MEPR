@@ -13,6 +13,7 @@ from app.config import (
     DEMO_DIR,
     EMO_ORDER,
     EMO_ORDER_FOR_BARS,
+    MATCH_SIMILARITY_THRESHOLD,
     PERS_COLORS,
     PERS_ORDER,
     TARGET_TRAIT_NAMES,
@@ -25,6 +26,8 @@ from app.utils import (
     create_session_dir,
     ensure_dir,
     render_gallery_html,
+    reset_attempt_timer,
+    start_attempt_timer,
 )
 from core.attribution import (
     compute_contributions_from_result,
@@ -36,6 +39,8 @@ from core.media_utils import extract_keyframes_from_result
 from core.matching import get_profession_trait_vector, match_profession
 from core.llm.qwen_client import generate_explanation, generate_explanation_v2, unload_model
 from core.runtime import analyze_video_basic, get_multitask_pred_with_attribution
+
+_RUN_STAGE_TIMER = {"start_ts": None, "attempt": None}
 
 
 def run_basic_and_split_heatmap(
@@ -251,6 +256,10 @@ def run_and_show(
         attempt_dir = os.path.join(session_dir, f"attempt_{attempt_id:02d}")
     attempt_dir = ensure_dir(attempt_dir)
     uid_suffix = f"_a{attempt_id:02d}_{int(time.time() * 1000)}"
+    start_attempt_timer(attempt_id)
+    _RUN_STAGE_TIMER["start_ts"] = time.perf_counter()
+    _RUN_STAGE_TIMER["attempt"] = attempt_id
+    print(f"[timer] run_stage start (attempt {attempt_id})")
 
     start = time.time()
     result = run_basic_and_split_heatmap(
@@ -269,6 +278,8 @@ def run_and_show(
     explain_md = core_outputs[5]
 
     if isinstance(payload, dict) and payload.get("error"):
+        _RUN_STAGE_TIMER["start_ts"] = None
+        _RUN_STAGE_TIMER["attempt"] = None
         return (
             payload,
             payload,
@@ -286,6 +297,7 @@ def run_and_show(
         match_result = match_profession(
             user_scores=user_scores,
             job_title=job_title or "",
+            threshold=MATCH_SIMILARITY_THRESHOLD,
         )
         payload["profession_match"] = match_result
         core_outputs[0] = payload
@@ -328,11 +340,24 @@ def generate_llm_recommendation(payload: dict, job_title: str, language: str):
     if not isinstance(payload, dict) or payload.get("error"):
         return payload, payload, ""
 
+    llm_start = time.perf_counter()
+    print("[timer] llm_recommendation start")
     llm_text = build_llm_explanation(
         payload=payload,
         job_title=job_title or "",
         language=language or "English",
     )
+    llm_elapsed = time.perf_counter() - llm_start
+    print(f"[timer] llm_recommendation end total={llm_elapsed:.2f}s")
+
+    stage_start = _RUN_STAGE_TIMER.get("start_ts")
+    attempt_id = _RUN_STAGE_TIMER.get("attempt")
+    if stage_start:
+        total_elapsed = time.perf_counter() - float(stage_start)
+        label = f"attempt {attempt_id}" if attempt_id else "attempt"
+        print(f"[timer] run_stage end ({label}) total={total_elapsed:.2f}s")
+    _RUN_STAGE_TIMER["start_ts"] = None
+    _RUN_STAGE_TIMER["attempt"] = None
     if llm_text:
         payload = dict(payload)
         payload["llm_explanation"] = llm_text
@@ -343,6 +368,9 @@ def generate_llm_recommendation(payload: dict, job_title: str, language: str):
 
 
 def reset_analysis_only():
+    reset_attempt_timer()
+    _RUN_STAGE_TIMER["start_ts"] = None
+    _RUN_STAGE_TIMER["attempt"] = None
     return (
         gr.update(value=None),
         {},
@@ -355,6 +383,7 @@ def reset_analysis_only():
         gr.update(visible=False),
         {},
         gr.update(visible=False),
+        gr.update(value="", visible=False),
         gr.update(visible=False),
         gr.update(visible=False),
         gr.update(visible=False),

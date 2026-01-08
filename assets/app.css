@@ -1,6 +1,7 @@
 :root {
   --viz-h: 240px;
   --video-h: 420px;
+  --video-bar-h: 36px;
   --content-max-w: 1280px;
   --app-bg: #ffffff;
   --panel-bg: #ffffff;
@@ -262,36 +263,47 @@
 
 #input_panel {
   display:flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: stretch;
   width: 100%;
   max-width: var(--content-max-w);
   margin: 0 auto;
+  gap: 16px;
 }
 #video_col {
   max-width: 720px;
-  margin: 5px auto;
-  height: 100%;
+  margin: 0;
+  flex: 1 1 auto;
+  height: var(--video-h);
 }
 #demo_col {
-  max-width: 240px;
-  height: 100%;
+  max-width: 260px;
+  width: 260px;
+  flex: 0 0 260px;
+  height: var(--video-h);
   display: flex;
   flex-direction: column;
   min-height: var(--video-h);
+  align-self: stretch;
 }
+
 #demo_buttons {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 8px;
-  height: 100%;
-  justify-content: space-between;
+  height: var(--video-h);
+  align-content: start;
+  justify-items: stretch;
+  width: 100%;
+  align-items: stretch;
+  overflow: auto;
   min-height: var(--video-h);
 }
+
 #demo_buttons button {
   width: 100%;
   justify-content: center;
-  flex: 1;
+  min-height: 36px;
   background: #f1f5f9 !important;
   border: 1px solid #e2e8f0 !important;
   color: #0f172a !important;
@@ -302,8 +314,11 @@
 }
 
 #main_video video {
-  object-fit: contain !important;
+  object-fit: cover !important;
+  width: 100%;
+  height: 100%;
   max-height: var(--video-h);
+  background: #000;
 }
 #main_video [data-testid="media-controls"] {
   justify-content: flex-start !important;
@@ -311,11 +326,47 @@
 }
 
 #main_video {
-  max-height: var(--video-h);
+  max-height: none;
+  min-height: calc(var(--video-h) + var(--video-bar-h));
+  height: auto !important;
+  overflow: visible !important;
 }
 #main_video > .video-container {
-  height: auto !important;
-  max-height: var(--video-h);
+  height: calc(var(--video-h) + var(--video-bar-h)) !important;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: transparent;
+  border-radius: 10px;
+  overflow: visible;
+}
+#main_video .upload-container,
+#main_video .wrap {
+  height: var(--video-h) !important;
+  min-height: var(--video-h);
+  background: #0b0b0b;
+  border-radius: 10px;
+  overflow: hidden;
+  flex: 0 0 var(--video-h);
+}
+#main_video .source-selection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: var(--video-bar-h);
+  margin: 0;
+}
+#main_video .icon-button-wrapper {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  padding: 2px 4px !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+#main_video .icon-button-wrapper .icon-button {
+  background: transparent !important;
 }
 
 #settings_col {
@@ -334,7 +385,7 @@
   width: 100% !important;
 }
 #run_row {
-  margin-top: 12px;
+  margin-top: 30px;
 }
 
 #results_group {
@@ -418,6 +469,7 @@
   min-width: 40px !important;
   width: 40px !important;
   max-width: 40px !important;
+  height: 40px !important;
 }
 
 #btn_view_prev {
@@ -462,6 +514,38 @@
   color: var(--text-muted);
   font-size: 13px;
   margin-top: 6px;
+}
+#progress_table {
+  margin: 8px 0 6px;
+}
+.progress-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+.progress-table th,
+.progress-table td {
+  border: 1px solid #e2e8f0;
+  padding: 8px 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+.progress-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #0f172a;
+}
+.progress-table .trait-cell {
+  font-weight: 600;
+}
+.progress-table .delta.up {
+  color: #16a34a;
+}
+.progress-table .delta.down {
+  color: #dc2626;
+}
+.progress-table .delta.flat {
+  color: #94a3b8;
 }
 #progress_graph {
   width: 100%;

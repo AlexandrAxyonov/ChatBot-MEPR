@@ -3,6 +3,7 @@ DEFAULT_NUM_QUESTIONS = 5
 DEFAULT_HISTORY_MAX = 3
 ENABLE_RADAR_PLOTS = True
 SHOW_JSON_BLOCK = False
+MATCH_SIMILARITY_THRESHOLD = 0.8
 
 EMO_ORDER = ["Neutral", "Anger", "Disgust", "Fear", "Happiness", "Sadness", "Surprise"]
 EMO_ORDER_FOR_BARS = ["Neutral", "Anger", "Disgust", "Fear", "Happiness", "Sadness", "Surprise"]

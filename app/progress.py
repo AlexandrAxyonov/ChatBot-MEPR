@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 import io
+import time
 from PIL import Image
 
 import gradio as gr
@@ -12,11 +13,15 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 from app.config import DEFAULT_HISTORY_MAX, EMO_ORDER, PERS_ORDER, TARGET_TRAIT_NAMES, ENABLE_RADAR_PLOTS
+from app.utils import finish_attempt_timer
 from core.llm.qwen_client import generate_progress_report, unload_model
 from core.matching import DEFAULT_SIMILARITY, get_profession_trait_vector
 
-_MIN_DELTA = 0.01
+_MIN_DELTA = 0.0
 _ATTEMPT_COLORS = ["#f97316", "#0ea5e9", "#22c55e"]
+_ARROW_UP = "▲"
+_ARROW_DOWN = "▼"
+_ARROW_FLAT = "•"
 
 
 def _vector_from_personality(personality: Dict[str, float]) -> List[float]:
@@ -238,6 +243,73 @@ def _build_progress_summary(
     return "<br>".join(lines)
 
 
+def _build_progress_table(
+    history: List[Dict[str, object]],
+    target_vec: List[float],
+    target_label: str,
+) -> str:
+    if not history:
+        return ""
+
+    trait_labels = ["O", "C", "E", "A", "N"]
+    headers = [f"Target ({target_label})"]
+    prev_sim = None
+    for item in history:
+        sim_pct = float(item.get("similarity", 0.0)) * 100.0
+        arrow = _ARROW_FLAT
+        arrow_cls = "flat"
+        if prev_sim is not None:
+            delta = sim_pct - prev_sim
+            if delta > _MIN_DELTA * 100.0:
+                arrow = _ARROW_UP
+                arrow_cls = "up"
+            elif delta < -_MIN_DELTA * 100.0:
+                arrow = _ARROW_DOWN
+                arrow_cls = "down"
+        prev_sim = sim_pct
+        headers.append(
+            f"Attempt {item['attempt']} ({sim_pct:.1f}%) "
+            f"<span class='delta {arrow_cls}'>({arrow})</span>"
+        )
+
+    lines = [
+        "<table class='progress-table'>",
+        "<thead><tr><th>Trait</th>",
+        "".join(f"<th>{h}</th>" for h in headers),
+        "</tr></thead>",
+        "<tbody>",
+    ]
+
+    for idx, trait in enumerate(PERS_ORDER):
+        target_pct = float(target_vec[idx]) * 100.0
+        row = [f"<td class='trait-cell'>{trait_labels[idx]}</td>"]
+        row.append(f"<td>{target_pct:.1f}%</td>")
+
+        prev_gap = None
+        for attempt in history:
+            curr_val = float(attempt["scores"].get(trait, 0.0))
+            arrow = _ARROW_FLAT
+            arrow_cls = "flat"
+            curr_gap = abs(target_vec[idx] - curr_val)
+            if prev_gap is not None:
+                if curr_gap < prev_gap - _MIN_DELTA:
+                    arrow = _ARROW_UP
+                    arrow_cls = "up"
+                elif curr_gap > prev_gap + _MIN_DELTA:
+                    arrow = _ARROW_DOWN
+                    arrow_cls = "down"
+            prev_gap = curr_gap
+            curr_pct = curr_val * 100.0
+            row.append(
+                f"<td>{curr_pct:.1f}% <span class='delta {arrow_cls}'>({arrow})</span></td>"
+            )
+
+        lines.append("<tr>" + "".join(row) + "</tr>")
+
+    lines.append("</tbody></table>")
+    return "".join(lines)
+
+
 def update_history(
     payload: dict,
     job_title: str,
@@ -248,8 +320,10 @@ def update_history(
     similarity_method: str = DEFAULT_SIMILARITY,
 ):
     if not isinstance(payload, dict) or payload.get("error"):
+        finish_attempt_timer()
         return (
             history or [],
+            gr.update(),
             gr.update(),
             gr.update(),
             gr.update(),
@@ -279,8 +353,10 @@ def update_history(
             if not job_title:
                 job_title = fallback_name
     if not full_target:
+        finish_attempt_timer()
         return (
             history or [],
+            gr.update(),
             gr.update(),
             gr.update(),
             gr.update(),
@@ -362,11 +438,15 @@ def update_history(
     bar_update = gr.update(value=_plot_progress_bars(history_list, target_vec, target_label))
     radar_group_update = gr.update(visible=bool(radar_img) and show_radar)
     bar_group_update = gr.update(visible=bool(history_list) and not show_radar)
+    table_html = _build_progress_table(history_list, target_vec, target_label)
+    table_update = gr.update(value=table_html, visible=bool(table_html))
 
     if len(history_list) < 2:
+        finish_attempt_timer()
         return (
             history_list,
             "Record another video to compare progress.",
+            table_update,
             gr.update(visible=True),
             try_again_update,
             run_update,
@@ -380,6 +460,9 @@ def update_history(
 
     summary = ""
     try:
+        attempt_label = history_list[-1]["attempt"] if history_list else "?"
+        llm_start = time.perf_counter()
+        print(f"[timer] llm_progress start (attempt {attempt_label})")
         summary = generate_progress_report(
             target_profession=target_label,
             target_trait_names=list(TARGET_TRAIT_NAMES),
@@ -388,6 +471,8 @@ def update_history(
             new_submits=[history_list[-1]],
             target_language=language or "English",
         )
+        llm_elapsed = time.perf_counter() - llm_start
+        print(f"[timer] llm_progress end (attempt {attempt_label}) total={llm_elapsed:.2f}s")
     except Exception:
         summary = ""
     finally:
@@ -397,9 +482,11 @@ def update_history(
         summary = _build_progress_summary(history_list, target_vec)
     summary = summary.replace("\n", "<br>")
 
+    finish_attempt_timer()
     return (
         history_list,
         summary,
+        table_update,
         gr.update(visible=True),
         try_again_update,
         run_update,

@@ -86,7 +86,6 @@ def build_demo() -> gr.Blocks:
                         )
                     with gr.Column(scale=2, min_width=220, elem_id="demo_col"):
                         if demo_video_paths:
-                            gr.Markdown("### Examples")
                             with gr.Column(elem_id="demo_buttons"):
                                 for idx, path in enumerate(demo_video_paths, start=1):
                                     label = f"Example {idx}"
@@ -263,6 +262,7 @@ def build_demo() -> gr.Blocks:
                             "O=Openness, C=Conscientiousness, E=Extraversion, A=Agreeableness, N=Non-Neuroticism.",
                             elem_id="ocean_note",
                         )
+                        progress_table = gr.HTML("", elem_id="progress_table", visible=False)
                         with gr.Row(elem_id="progress_actions"):
                             btn_reset_bottom = gr.Button(
                                 "Start new session",
@@ -385,6 +385,7 @@ def build_demo() -> gr.Blocks:
                 limit_md,
                 btn_run,
                 progress_md,
+                progress_table,
                 progress_panel,
                 btn_try_again,
                 btn_reset_bottom,
@@ -426,6 +427,7 @@ def build_demo() -> gr.Blocks:
                 limit_md,
                 btn_run,
                 progress_md,
+                progress_table,
                 progress_panel,
                 btn_try_again,
                 btn_reset_bottom,
@@ -543,6 +545,7 @@ def build_demo() -> gr.Blocks:
             outputs=[
                 history_state,
                 progress_md,
+                progress_table,
                 progress_panel,
                 btn_try_again,
                 btn_run,
@@ -599,6 +602,7 @@ def build_demo() -> gr.Blocks:
                 runtime_md,
                 analysis_outputs,
                 viz_state,
+                progress_table,
                 progress_panel,
                 progress_radar,
                 progress_bars,

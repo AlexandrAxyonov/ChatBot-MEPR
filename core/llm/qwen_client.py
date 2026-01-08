@@ -205,24 +205,30 @@ def generate_explanation(
 ) -> str:
     tokenizer, model = _load_model(model_id=model_id)
 
+    target_traits_pct = [round(float(v) * 100.0, 1) for v in target_traits]
+    candidate_big5_pct = [round(float(v) * 100.0, 1) for v in candidate_big5]
+    similarity_pct = float(similarity_score) * 100.0
+    best_match_similarity_pct = float(best_match_similarity) * 100.0
+    threshold_pct = float(threshold) * 100.0
+
     prompt = (
         "You are an AI career advisor. Analyze the candidate's match to their desired profession using the data below, "
         "and generate a concise, constructive response in the target language. "
 
         "=== INPUT DATA ===\n"
         f"Target profession: {target_profession}\n"
-        f"Target trait profile (10 traits, 0-1): {target_traits}\n"
-        f"Candidate's predicted Big Five scores: {candidate_big5}\n"
+        f"Target trait profile (10 traits, 0-100%): {target_traits_pct}\n"
+        f"Candidate's predicted Big Five scores (0-100%): {candidate_big5_pct}\n"
         f"Predicted dominant emotion: {predicted_emotion} ({emotion_confidence:.1f}%)\n"
         f"Candidate's spoken text: \"{candidate_text}\"\n"
-        f"Similarity to target: {similarity_score:.3f}\n"
-        f"Good-fit threshold: {threshold}\n"
-        f"Best-matching profession: {best_match_profession} (similarity: {best_match_similarity:.3f})\n"
+        f"Similarity to target: {similarity_pct:.1f}%\n"
+        f"Good-fit threshold: {threshold_pct:.0f}%\n"
+        f"Best-matching profession: {best_match_profession} (similarity: {best_match_similarity_pct:.1f}%)\n"
         f"Target language: {target_language}\n"
 
         "=== STRICT INSTRUCTIONS ===\n"
         "1. Start with: 'You are a strong match', 'You partially match', or 'You currently do not match' the target profession.\n"
-        "2. If similarity < threshold, state the numeric similarity and threshold (e.g., 'similarity is 0.645, below the 0.9 threshold').\n"
+        "2. If similarity < threshold, state the numeric similarity and threshold as percentages (e.g., 'similarity is 64.5%, below the 90% threshold').\n"
         "3. If the dominant emotion is Anger, Fear, Sadness, Disgust, or Surprise, say it may distort the assessment and advise recording in a calm, neutral state.\n"
         "4. Give 2-3 concrete, natural topics to discuss in a new video that reflect traits the profession requires but the candidate currently under-expresses (e.g., for high Extraversion: 'Describe how you energize a team').\n"
         "5. If similarity < threshold, add: 'Your profile currently aligns more closely with the role of [Best-Matching Profession].'\n"
@@ -287,16 +293,20 @@ def generate_explanation_v2(
     neutral_idx = emotion_names.index("Neutral")
     neutral_prob = emotion_probs[neutral_idx]
 
-    target_profile = dict(zip(target_trait_names, target_trait_scores))
-    candidate_profile = dict(zip(predicted_trait_names, predicted_trait_scores))
+    target_profile = {k: round(float(v) * 100.0, 1) for k, v in zip(target_trait_names, target_trait_scores)}
+    candidate_profile = {k: round(float(v) * 100.0, 1) for k, v in zip(predicted_trait_names, predicted_trait_scores)}
+    emotion_probs_pct = [round(float(p) * 100.0, 1) for p in emotion_probs]
+    similarity_pct = float(target_similarity) * 100.0
+    best_match_similarity_pct = float(best_match_similarity) * 100.0
+    threshold_pct = float(threshold) * 100.0
 
     prompt = (
         "You are an AI career advisor. Analyze the candidate's multimodal profile and give a concise, practical recommendation.\n\n"
         "=== INPUT DATA ===\n"
         f"Target profession: {target_profession}\n"
-        f"Target personality profile (10 traits, 0-1): {target_profile}\n"
-        f"Candidate's predicted Big Five (5 traits, 0-1): {candidate_profile}\n"
-        f"Emotion probabilities (order: {emotion_names}): {emotion_probs}\n"
+        f"Target personality profile (10 traits, 0-100%): {target_profile}\n"
+        f"Candidate's predicted Big Five (5 traits, 0-100%): {candidate_profile}\n"
+        f"Emotion probabilities in % (order: {emotion_names}): {emotion_probs_pct}\n"
         f"Dominant emotion: {dominant_emotion} ({dominant_prob:.1%})\n"
         f"Multimodal analysis summary: {multimodal_summary}\n"
         f"Spoken transcription: \"{transcription}\"\n"
@@ -308,14 +318,14 @@ def generate_explanation_v2(
         f"Audio loudness: {audio_loudness}\n"
         f"Audio noise level: {audio_noise}\n"
         f"Audio note: {audio_note}\n"
-        f"Similarity to target profession: {target_similarity:.3f}\n"
-        f"Similarity to best-matching profession ('{best_match_profession}'): {best_match_similarity:.3f}\n"
-        f"Good-fit threshold: {threshold}\n"
+        f"Similarity to target profession: {similarity_pct:.1f}%\n"
+        f"Similarity to best-matching profession ('{best_match_profession}'): {best_match_similarity_pct:.1f}%\n"
+        f"Good-fit threshold: {threshold_pct:.0f}%\n"
         f"Target language: {target_language}\n\n"
 
         "=== RESPONSE REQUIREMENTS ===\n"
         "1. Start with one sentence: 'You are a strong match', 'You partially match', or 'You currently do not match' the target profession.\n"
-        "2. Mention the similarity to the target and whether it meets the threshold. If below, mention the best-matching profession.\n"
+        "2. Mention the similarity to the target and whether it meets the threshold. Use percentages. If below, mention the best-matching profession.\n"
         "3. Briefly describe 2 strongest and 2 weakest Big Five traits relative to the target profile (use trait names as-is).\n"
         "4. Emotion check: if dominant emotion is not 'Neutral' AND dominant_prob > 0.4 AND neutral_prob < 0.4, warn it may distort the assessment and suggest re-recording in a calm state.\n"
         "5. Visual feedback: comment on framing and lighting. Use the framing_note. If distance_to_camera != 'normal', advise adjusting distance. If lighting != 'normal', use the lighting_note.\n"
@@ -360,22 +370,26 @@ def generate_progress_report(
 ) -> str:
     tokenizer, model = _load_model(model_id=model_id)
 
-    target_profile = dict(zip(target_trait_names, target_trait_scores))
+    target_profile = {k: round(float(v) * 100.0, 1) for k, v in zip(target_trait_names, target_trait_scores)}
 
     baseline_attempt = int(baseline_submit.get("attempt", 1))
-    baseline_traits = dict(
-        zip(
+    baseline_traits = {
+        k: round(float(v) * 100.0, 1)
+        for k, v in zip(
             baseline_submit["predicted_trait_names"],
             baseline_submit["predicted_trait_scores"],
         )
-    )
+    }
     baseline_emotion_idx = int(np.argmax(baseline_submit["emotion_probs"]))
     baseline_emotion = baseline_submit["emotion_names"][baseline_emotion_idx]
     baseline_emotion_prob = baseline_submit["emotion_probs"][baseline_emotion_idx]
 
     new_attempts = []
     for i, sub in enumerate(new_submits, 1):
-        traits = dict(zip(sub["predicted_trait_names"], sub["predicted_trait_scores"]))
+        traits = {
+            k: round(float(v) * 100.0, 1)
+            for k, v in zip(sub["predicted_trait_names"], sub["predicted_trait_scores"])
+        }
         emo_idx = int(np.argmax(sub["emotion_probs"]))
         emo = sub["emotion_names"][emo_idx]
         emo_prob = sub["emotion_probs"][emo_idx]
@@ -389,9 +403,9 @@ def generate_progress_report(
             "body_position": sub["body_position"],
             "distance_to_camera": sub["distance_to_camera"],
             "lighting": sub["lighting"],
-            "target_similarity": sub["target_similarity"],
+            "target_similarity": float(sub["target_similarity"]) * 100.0,
             "best_match_profession": top_prof["profession"],
-            "best_match_similarity": top_prof["similarity"],
+            "best_match_similarity": float(top_prof["similarity"]) * 100.0,
         })
 
     prompt = (
@@ -407,7 +421,7 @@ def generate_progress_report(
         f"Dominant emotion: {baseline_emotion} ({baseline_emotion_prob:.1%})\n"
         f"Transcription: \"{baseline_submit['transcription']}\"\n"
         f"Frame: position={baseline_submit['body_position']}, distance={baseline_submit['distance_to_camera']}, lighting={baseline_submit['lighting']}\n"
-        f"Similarity to target: {baseline_submit['target_similarity']:.3f}\n\n"
+        f"Similarity to target: {float(baseline_submit['target_similarity']) * 100.0:.1f}%\n\n"
 
         "=== NEW SUBMITS ===\n"
     )
@@ -419,14 +433,14 @@ def generate_progress_report(
             f"Dominant emotion: {att['emotion']}\n"
             f"Transcription: \"{att['transcription']}\"\n"
             f"Frame: position={att['body_position']}, distance={att['distance_to_camera']}, lighting={att['lighting']}\n"
-            f"Similarity to target: {att['target_similarity']:.3f}\n"
-            f"Best match: {att['best_match_profession']} ({att['best_match_similarity']:.3f})\n\n"
+            f"Similarity to target: {att['target_similarity']:.1f}%\n"
+            f"Best match: {att['best_match_profession']} ({att['best_match_similarity']:.1f}%)\n\n"
         )
 
     prompt += (
         f"=== INSTRUCTIONS ===\n"
         f"1. Compare baseline vs latest new submit (or best among new).\n"
-        f"2. Highlight which traits moved CLOSER to the target profile (e.g., 'Your Extraversion increased from 0.33 to 0.58, closer to the required 0.72').\n"
+        f"2. Highlight which traits moved CLOSER to the target profile (use percentages, e.g., 'Your Extraversion increased from 33% to 58%, closer to the required 72%').\n"
         f"3. Note if emotional state improved (e.g., less Anger, more Neutral).\n"
         f"4. Comment on improvements in framing (centered position, normal distance, good lighting).\n"
         f"5. State whether similarity to target profession increased, and if the candidate is now closer to a different role.\n"

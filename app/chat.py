@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from typing import List, Optional, Sequence
+import time
 
 import gradio as gr
 
 from app.config import DEFAULT_NUM_QUESTIONS
+from app.utils import reset_attempt_timer
 from core.llm.qwen_client import generate_recommendations, unload_model
 from core.matching import get_profession_trait_vector
 
@@ -72,12 +74,16 @@ def generate_questions_ui(job_title: str, language: str):
         )
 
     try:
+        llm_start = time.perf_counter()
+        print("[timer] llm_questions start")
         questions = generate_recommendations(
             job_title=title,
             trait_scores=trait_scores,
             target_language=language or "English",
             num_recommendations=DEFAULT_NUM_QUESTIONS,
         )
+        llm_elapsed = time.perf_counter() - llm_start
+        print(f"[timer] llm_questions end total={llm_elapsed:.2f}s")
     finally:
         unload_model()
 
@@ -129,12 +135,16 @@ def regenerate_questions_ui(job_title: str, language: str):
         )
 
     try:
+        llm_start = time.perf_counter()
+        print("[timer] llm_questions start (regen)")
         questions = generate_recommendations(
             job_title=title,
             trait_scores=trait_scores,
             target_language=language or "English",
             num_recommendations=DEFAULT_NUM_QUESTIONS,
         )
+        llm_elapsed = time.perf_counter() - llm_start
+        print(f"[timer] llm_questions end total={llm_elapsed:.2f}s (regen)")
     finally:
         unload_model()
 
@@ -177,6 +187,7 @@ def ready_to_start():
 
 def reset_session():
     unload_model()
+    reset_attempt_timer()
     return (
         gr.update(value="English", interactive=True),
         gr.update(value="", interactive=True),
@@ -205,6 +216,7 @@ def reset_session():
         gr.update(value="", visible=False),
         gr.update(interactive=True),
         "",
+        gr.update(value="", visible=False),
         gr.update(visible=False),
         gr.update(visible=False),
         gr.update(visible=False),
